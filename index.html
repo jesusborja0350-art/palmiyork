@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Palmiyork · Dime lo que quieras</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap">
+<style>
+  :root{
+    --bg:#ffe45e; --ink:#1b1fd6; --card:#fffdf0; --soft:#6b6ef0;
+    --font:"Bricolage Grotesque",system-ui,-apple-system,Segoe UI,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--font);
+    display:flex;align-items:center;justify-content:center;
+    padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom));
+    min-height:100vh;
+  }
+  main{width:100%;max-width:420px}
+  h1{font-size:clamp(44px,14vw,72px);line-height:.9;overflow-wrap:anywhere;margin:0 0 8px;font-weight:800;letter-spacing:-.04em}
+  .sub{font-size:19px;font-weight:500;margin:0 0 24px}
+  .card{background:var(--card);border:3px solid var(--ink);border-radius:22px;padding:18px;box-shadow:6px 6px 0 var(--ink)}
+  .q{font-weight:800;font-size:20px;margin:0 0 12px}
+  textarea{
+    width:100%;min-height:150px;resize:none;border:0;outline:0;background:transparent;
+    font:500 20px/1.35 var(--font);color:var(--ink);
+  }
+  textarea::placeholder{color:var(--soft);opacity:.7}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+  .count{font-size:14px;color:var(--soft)}
+  button{
+    font:800 18px var(--font);background:var(--ink);color:var(--bg);border:0;border-radius:999px;
+    padding:14px 26px;cursor:pointer;
+  }
+  button:focus-visible,textarea:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .note{font-size:14px;margin:18px 4px 0;font-weight:500}
+  .ok{display:none;text-align:center}
+  .ok h2{font-size:34px;margin:0 0 6px;line-height:1}
+  .ok p{margin:0 0 16px;font-weight:500}
+  .ok button{background:transparent;color:var(--ink);border:3px solid var(--ink)}
+  input[type=text]{width:100%;border:0;border-bottom:3px solid var(--ink);outline:0;background:transparent;font:500 18px var(--font);color:var(--ink);padding:6px 0 8px;margin-bottom:14px}
+  input[type=text]::placeholder{color:var(--soft);opacity:.7}
+  input[type=text]:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+  .lbl{font-size:14px;font-weight:800;margin:0}
+  .err{color:#b3001b;font-size:14px;font-weight:500;margin:10px 4px 0;min-height:18px}
+  @media (prefers-reduced-motion:no-preference){
+    .ok.show{animation:pop .25s ease-out}
+    @keyframes pop{from{transform:scale(.96)}to{transform:scale(1)}}
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Palmiyork</h1>
+  <p class="sub">Escríbele a <span id="owner">Jesus</span> lo que quieras. Tu nombre no se verá. O eso dice aquí 😏</p>
+
+  <section class="card" id="formCard">
+    <p class="q">Mándame un mensaje anónimo</p>
+    <p class="lbl">Tu nombre (no se verá 🤫)</p>
+    <input type="text" id="name" maxlength="30" placeholder="Escribe tu nombre" aria-label="Tu nombre" autocomplete="off">
+    <textarea id="msg" maxlength="400" placeholder="Pregunta, confesión, chisme…" aria-label="Tu mensaje"></textarea>
+    <div class="row">
+      <span class="count"><span id="n">0</span>/400</span>
+      <button id="send" disabled>Enviar</button>
+    </div>
+  </section>
+
+  <section class="card ok" id="okCard" aria-live="polite">
+    <h2>Mensaje enviado ✅</h2>
+    <p>Tu nombre sí me llegó 😈</p>
+    <button id="again">Mandar otro</button>
+  </section>
+
+  <p class="err" id="err" role="alert"></p>
+  <p class="note">Los mensajes llegan por WhatsApp a quien creó esta página. Es una broma entre amigos.</p>
+</main>
+
+<script>
+  // ====== CONFIGURA ESTO ======
+  const OWNER_NAME = "Jesus";
+  const PHONE  = "573009838138";   // tu número con código de país, sin + ni espacios
+  const APIKEY = "840218";      // la que te da CallMeBot (ver instrucciones)
+  const COOLDOWN_MS = 20000;       // espera entre mensajes
+  // ============================
+
+  const $ = id => document.getElementById(id);
+  const msg = $("msg"), send = $("send"), n = $("n"), err = $("err");
+  document.getElementById("owner").textContent = OWNER_NAME;
+  
+  const nameEl = $("name");
+  let last = 0;
+
+  function refresh(){
+    n.textContent = msg.value.length;
+    send.disabled = msg.value.trim().length < 2 || nameEl.value.trim().length < 2;
+  }
+  msg.addEventListener("input", refresh);
+  nameEl.addEventListener("input", refresh);
+
+  send.addEventListener("click", async () => {
+    err.textContent = "";
+    const wait = COOLDOWN_MS - (Date.now() - last);
+    if (wait > 0) { err.textContent = "Espera " + Math.ceil(wait/1000) + " s para enviar otro."; return; }
+    send.disabled = true; send.textContent = "Enviando…";
+    const text = "📩 Palmiyork:\nDe: " + nameEl.value.trim() + "\n\n" + msg.value.trim();
+    const url = "https://api.callmebot.com/whatsapp.php?phone=" + encodeURIComponent(PHONE) +
+                "&apikey=" + encodeURIComponent(APIKEY) +
+                "&text=" + encodeURIComponent(text);
+    try {
+      await fetch(url, { mode: "no-cors" });
+      last = Date.now();
+      msg.value = ""; nameEl.value = ""; refresh();
+      $("formCard").style.display = "none";
+      $("okCard").style.display = "block";
+      $("okCard").classList.add("show");
+    } catch (e) {
+      err.textContent = "No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.";
+    }
+    send.textContent = "Enviar";
+    refresh();
+  });
+
+  $("again").addEventListener("click", () => {
+    $("okCard").style.display = "none";
+    $("okCard").classList.remove("show");
+    $("formCard").style.display = "block";
+    msg.focus();
+  });
+</script>
+</body>
+</html>
